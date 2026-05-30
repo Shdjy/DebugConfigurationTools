@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -53,6 +54,8 @@ namespace PackagingInspectionTools.UI
             Size = new Size(1360, 780);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Microsoft YaHei UI", 9F);
+            BackColor = UiStyles.WindowBackColor;
+            Icon = new Icon(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Resources\\app.ico"));
 
             BuildLayout();
             Load += (sender, args) => RefreshAdapters();
@@ -64,11 +67,15 @@ namespace PackagingInspectionTools.UI
             {
                 Dock = DockStyle.Fill
             };
+            tabs.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular);
             Controls.Add(tabs);
 
             var networkPage = new TabPage("网络设置");
             var cpuPage = new TabPage("CPU 设置");
             var gpuPage = new TabPage("GPU 设置");
+            UiStyles.ApplyPage(networkPage);
+            UiStyles.ApplyPage(cpuPage);
+            UiStyles.ApplyPage(gpuPage);
             tabs.TabPages.Add(networkPage);
             tabs.TabPages.Add(cpuPage);
             tabs.TabPages.Add(gpuPage);
@@ -82,7 +89,7 @@ namespace PackagingInspectionTools.UI
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 204));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             networkPage.Controls.Add(root);
 
@@ -105,7 +112,8 @@ namespace PackagingInspectionTools.UI
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true
+                WrapContents = true,
+                BackColor = UiStyles.WindowBackColor
             };
 
             toolbar.Controls.Add(CreateButton("刷新", RefreshAdapters));
@@ -121,7 +129,7 @@ namespace PackagingInspectionTools.UI
                 AutoSize = true,
                 Margin = new Padding(24, 10, 0, 0),
                 Text = "写入参数和重启网卡需要管理员权限。修改生产网络前请确认当前连接不会中断关键设备。",
-                ForeColor = Color.FromArgb(90, 90, 90)
+                ForeColor = UiStyles.SecondaryTextColor
             };
             toolbar.Controls.Add(note);
 
@@ -151,97 +159,77 @@ namespace PackagingInspectionTools.UI
 
         private Control BuildEditor()
         {
-            var panel = new TableLayoutPanel
+            var outer = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 6,
+                ColumnCount = 1,
                 RowCount = 3,
-                Padding = new Padding(0, 12, 0, 0)
+                Padding = new Padding(0, 8, 0, 0),
+                BackColor = UiStyles.WindowBackColor
             };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+            outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+            outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
 
-            var valueLabel = new Label
-            {
-                Text = "参数值",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            panel.Controls.Add(valueLabel, 0, 0);
+            var propertyRow = CreateEditorRow(
+                new ColumnStyle(SizeType.Percent, 100),
+                new ColumnStyle(SizeType.Absolute, 170),
+                new ColumnStyle(SizeType.Absolute, 190));
+            var ipRow = CreateEditorRow(
+                new ColumnStyle(SizeType.Absolute, 220),
+                new ColumnStyle(SizeType.Absolute, 220),
+                new ColumnStyle(SizeType.Absolute, 180),
+                new ColumnStyle(SizeType.Absolute, 220),
+                new ColumnStyle(SizeType.Percent, 100));
+            var pingRow = CreateEditorRow(
+                new ColumnStyle(SizeType.Absolute, 220),
+                new ColumnStyle(SizeType.Absolute, 112),
+                new ColumnStyle(SizeType.Absolute, 142),
+                new ColumnStyle(SizeType.Absolute, 122),
+                new ColumnStyle(SizeType.Absolute, 112),
+                new ColumnStyle(SizeType.Absolute, 120),
+                new ColumnStyle(SizeType.Absolute, 160),
+                new ColumnStyle(SizeType.Percent, 100));
+            outer.Controls.Add(propertyRow, 0, 0);
+            outer.Controls.Add(ipRow, 0, 1);
+            outer.Controls.Add(pingRow, 0, 2);
 
-            _valueComboBox.Dock = DockStyle.Fill;
             _valueComboBox.DropDownStyle = ComboBoxStyle.DropDown;
-            panel.Controls.Add(_valueComboBox, 1, 0);
-            panel.SetColumnSpan(_valueComboBox, 3);
+            propertyRow.Controls.Add(UiStyles.CreateLabeledField("参数值", _valueComboBox), 0, 0);
+            propertyRow.Controls.Add(CreateEditorButton("载入当前值", LoadSelectedPropertyValue), 1, 0);
+            propertyRow.Controls.Add(CreateEditorButton("写入选中参数", SaveSelectedProperty), 2, 0);
 
-            panel.Controls.Add(CreateButton("载入当前值", LoadSelectedPropertyValue), 4, 0);
-            panel.Controls.Add(CreateButton("写入选中参数", SaveSelectedProperty), 5, 0);
+            ipRow.Controls.Add(UiStyles.CreateLabeledField("静态 IP", _ipAddressTextBox), 0, 0);
+            ipRow.Controls.Add(UiStyles.CreateLabeledField("子网掩码", _subnetMaskTextBox), 1, 0);
+            ipRow.Controls.Add(CreateEditorButton("应用静态 IP", ApplyStaticIPv4Address), 2, 0);
+            ipRow.Controls.Add(CreateEditorButton("恢复自动获取 IP", EnableDhcpIPv4), 3, 0);
 
-            panel.Controls.Add(new Label
-            {
-                Text = "静态 IP",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft
-            }, 0, 1);
-            _ipAddressTextBox.Dock = DockStyle.Fill;
-            panel.Controls.Add(_ipAddressTextBox, 1, 1);
+            pingRow.Controls.Add(UiStyles.CreateLabeledField("Ping 目标", _pingTargetTextBox), 0, 0);
+            pingRow.Controls.Add(UiStyles.CreateLabeledField("次数", ConfigureNumber(_pingCountInput, 1, 100, 4, 56)), 1, 0);
+            pingRow.Controls.Add(UiStyles.CreateLabeledField("超时 ms", ConfigureNumber(_pingTimeoutInput, 100, 60000, 1000, 72)), 2, 0);
+            pingRow.Controls.Add(UiStyles.CreateLabeledField("包大小", ConfigureNumber(_pingBufferSizeInput, 0, 65500, 32, 72)), 3, 0);
+            pingRow.Controls.Add(UiStyles.CreateLabeledField("TTL", ConfigureNumber(_pingTtlInput, 1, 255, 128, 56)), 4, 0);
+            pingRow.Controls.Add(CreatePingFlagPanel(), 5, 0);
+            pingRow.Controls.Add(CreateEditorButton("开始 Ping", PingTarget), 6, 0);
 
-            panel.Controls.Add(new Label
-            {
-                Text = "子网掩码",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft
-            }, 2, 1);
-            _subnetMaskTextBox.Dock = DockStyle.Fill;
-            panel.Controls.Add(_subnetMaskTextBox, 3, 1);
-
-            panel.Controls.Add(CreateButton("应用静态 IP", ApplyStaticIPv4Address), 4, 1);
-            panel.Controls.Add(CreateButton("恢复自动获取 IP", EnableDhcpIPv4), 5, 1);
-
-            panel.Controls.Add(new Label
-            {
-                Text = "Ping 目标",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft
-            }, 0, 2);
-            _pingTargetTextBox.Dock = DockStyle.Fill;
-            panel.Controls.Add(_pingTargetTextBox, 1, 2);
-
-            var pingOptions = BuildPingOptionsPanel();
-            panel.Controls.Add(pingOptions, 2, 2);
-            panel.SetColumnSpan(pingOptions, 3);
-            panel.Controls.Add(CreateButton("开始 Ping", PingTarget), 5, 2);
-
-            return panel;
+            return outer;
         }
 
-        private Control BuildPingOptionsPanel()
+        private Control CreatePingFlagPanel()
         {
             var panel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false
+                WrapContents = false,
+                BackColor = UiStyles.WindowBackColor,
+                Padding = new Padding(0, 28, 0, 0)
             };
 
-            panel.Controls.Add(CreateInlineLabel("次数"));
-            panel.Controls.Add(ConfigureNumber(_pingCountInput, 1, 100, 4, 56));
-            panel.Controls.Add(CreateInlineLabel("超时ms"));
-            panel.Controls.Add(ConfigureNumber(_pingTimeoutInput, 100, 60000, 1000, 72));
-            panel.Controls.Add(CreateInlineLabel("包"));
-            panel.Controls.Add(ConfigureNumber(_pingBufferSizeInput, 0, 65500, 32, 72));
-            panel.Controls.Add(CreateInlineLabel("TTL"));
-            panel.Controls.Add(ConfigureNumber(_pingTtlInput, 1, 255, 128, 56));
             _pingDontFragmentCheckBox.Text = "禁止分片";
             _pingDontFragmentCheckBox.AutoSize = true;
-            _pingDontFragmentCheckBox.Margin = new Padding(10, 8, 0, 0);
+            _pingDontFragmentCheckBox.Margin = new Padding(0, 0, 0, 0);
+            _pingDontFragmentCheckBox.ForeColor = UiStyles.SecondaryTextColor;
             panel.Controls.Add(_pingDontFragmentCheckBox);
 
             return panel;
@@ -263,6 +251,7 @@ namespace PackagingInspectionTools.UI
             _adapterGrid.RowHeadersVisible = false;
             _adapterGrid.BackgroundColor = SystemColors.Window;
             _adapterGrid.BorderStyle = BorderStyle.FixedSingle;
+            UiStyles.StyleGrid(_adapterGrid);
             _adapterGrid.DataSource = _adapterSource;
             _adapterGrid.SelectionChanged += (sender, args) => ShowSelectedAdapterProperties();
 
@@ -293,6 +282,7 @@ namespace PackagingInspectionTools.UI
             _propertyGrid.RowHeadersVisible = false;
             _propertyGrid.BackgroundColor = SystemColors.Window;
             _propertyGrid.BorderStyle = BorderStyle.FixedSingle;
+            UiStyles.StyleGrid(_propertyGrid);
             _propertyGrid.DataSource = _propertySource;
             _propertyGrid.SelectionChanged += (sender, args) => LoadSelectedPropertyValue();
 
@@ -849,11 +839,38 @@ namespace PackagingInspectionTools.UI
             var button = new Button
             {
                 Text = text,
-                Width = 150,
-                Height = 32,
+                Width = UiStyles.GetButtonWidth(text, SystemFonts.MessageBoxFont, 150),
+                Height = 34,
                 Margin = new Padding(0, 4, 8, 4)
             };
+            UiStyles.StyleButton(button);
             button.Click += (sender, args) => action();
+            return button;
+        }
+
+        private static TableLayoutPanel CreateEditorRow(params ColumnStyle[] columns)
+        {
+            var row = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = columns.Length,
+                RowCount = 1,
+                BackColor = UiStyles.WindowBackColor
+            };
+
+            foreach (var column in columns)
+            {
+                row.ColumnStyles.Add(column);
+            }
+
+            return row;
+        }
+
+        private static Button CreateEditorButton(string text, Action action)
+        {
+            var button = CreateButton(text, action);
+            button.Margin = new Padding(0, 24, 8, 4);
+            button.Height = 34;
             return button;
         }
 

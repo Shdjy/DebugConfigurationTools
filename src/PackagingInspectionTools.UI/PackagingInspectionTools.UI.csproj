@@ -3,16 +3,24 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>7.3</LangVersion>
+    <Platforms>AnyCPU;x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <ImplicitUsings>false</ImplicitUsings>
     <AssemblyName>PackagingInspectionTools</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Resources\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PackagingInspectionTools.Core\PackagingInspectionTools.Core.csproj" />

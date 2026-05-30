@@ -23,6 +23,7 @@ namespace PackagingInspectionTools.UI
         {
             _gpuService = gpuService;
             Dock = DockStyle.Fill;
+            BackColor = UiStyles.WindowBackColor;
             BuildLayout();
 
             _refreshTimer.Interval = 3000;
@@ -42,11 +43,12 @@ namespace PackagingInspectionTools.UI
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 4,
-                Padding = new Padding(12)
+                Padding = new Padding(12),
+                BackColor = UiStyles.WindowBackColor
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             Controls.Add(root);
 
@@ -67,7 +69,8 @@ namespace PackagingInspectionTools.UI
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true
+                WrapContents = true,
+                BackColor = UiStyles.WindowBackColor
             };
 
             toolbar.Controls.Add(CreateButton("刷新 GPU 状态", () => RefreshGpus(true)));
@@ -82,7 +85,7 @@ namespace PackagingInspectionTools.UI
                 AutoSize = true,
                 Margin = new Padding(0, 4, 0, 0),
                 Text = "锁频、功耗上限和计算模式依赖 NVIDIA nvidia-smi，通常需要管理员权限。用于减少 AI 推理进程因频率波动导致的耗时抖动。",
-                ForeColor = Color.FromArgb(90, 90, 90)
+                ForeColor = UiStyles.SecondaryTextColor
             };
             toolbar.Controls.Add(note);
 
@@ -94,36 +97,31 @@ namespace PackagingInspectionTools.UI
             var panel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 10,
-                Padding = new Padding(0, 12, 0, 0)
+                ColumnCount = 6,
+                RowCount = 2,
+                Padding = new Padding(0, 10, 0, 0),
+                BackColor = UiStyles.WindowBackColor
             };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (var index = 0; index < 6; index++)
+            {
+                panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / 6));
+            }
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
-            panel.Controls.Add(Label("功耗 W"), 0, 0);
-            panel.Controls.Add(Number(_powerLimitInput, 1, 1000, 200), 1, 0);
-            panel.Controls.Add(Label("最低 MHz"), 2, 0);
-            panel.Controls.Add(Number(_minClockInput, 1, 5000, 1200), 3, 0);
-            panel.Controls.Add(Label("最高 MHz"), 4, 0);
-            panel.Controls.Add(Number(_maxClockInput, 1, 5000, 1800), 5, 0);
+            panel.Controls.Add(UiStyles.CreateLabeledField("功耗上限 W", Number(_powerLimitInput, 1, 1000, 200)), 0, 0);
+            panel.Controls.Add(UiStyles.CreateLabeledField("最低核心频率 MHz", Number(_minClockInput, 1, 5000, 1200)), 1, 0);
+            panel.Controls.Add(UiStyles.CreateLabeledField("最高核心频率 MHz", Number(_maxClockInput, 1, 5000, 1800)), 2, 0);
 
             _computeModeComboBox.Dock = DockStyle.Fill;
             _computeModeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _computeModeComboBox.Items.AddRange(new object[] { "DEFAULT", "EXCLUSIVE_PROCESS", "PROHIBITED" });
             _computeModeComboBox.SelectedIndex = 0;
-            panel.Controls.Add(_computeModeComboBox, 6, 0);
+            panel.Controls.Add(UiStyles.CreateLabeledField("计算模式", _computeModeComboBox), 3, 0);
 
-            panel.Controls.Add(CreateButton("设置功耗上限", SetPowerLimit), 7, 0);
-            panel.Controls.Add(CreateButton("锁定核心频率", LockGraphicsClock), 8, 0);
-            panel.Controls.Add(CreateButton("设置计算模式", SetComputeMode), 9, 0);
+            panel.Controls.Add(CreateButton("设置功耗上限", SetPowerLimit), 0, 1);
+            panel.Controls.Add(CreateButton("锁定核心频率", LockGraphicsClock), 1, 1);
+            panel.Controls.Add(CreateButton("设置计算模式", SetComputeMode), 2, 1);
 
             return panel;
         }
@@ -142,6 +140,7 @@ namespace PackagingInspectionTools.UI
             _gpuGrid.RowHeadersVisible = false;
             _gpuGrid.BackgroundColor = SystemColors.Window;
             _gpuGrid.BorderStyle = BorderStyle.FixedSingle;
+            UiStyles.StyleGrid(_gpuGrid);
             _gpuGrid.DataSource = _gpuSource;
             _gpuGrid.Columns.Add(FillColumn("Index", "GPU", 50, 6));
             _gpuGrid.Columns.Add(FillColumn("Name", "名称", 180, 20));
@@ -341,22 +340,13 @@ namespace PackagingInspectionTools.UI
                 result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
 
-        private static Label Label(string text)
-        {
-            return new Label
-            {
-                Text = text,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-        }
-
         private static NumericUpDown Number(NumericUpDown input, int minimum, int maximum, int value)
         {
             input.Minimum = minimum;
             input.Maximum = maximum;
             input.Value = value;
             input.Dock = DockStyle.Fill;
+            UiStyles.StyleInput(input);
             return input;
         }
 
@@ -397,10 +387,11 @@ namespace PackagingInspectionTools.UI
             var button = new Button
             {
                 Text = text,
-                Width = 150,
-                Height = 32,
+                Width = UiStyles.GetButtonWidth(text, SystemFonts.MessageBoxFont, 150),
+                Height = 34,
                 Margin = new Padding(0, 4, 8, 4)
             };
+            UiStyles.StyleButton(button);
             button.Click += (sender, args) => action();
             return button;
         }

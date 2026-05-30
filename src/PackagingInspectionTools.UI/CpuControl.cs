@@ -24,6 +24,7 @@ namespace PackagingInspectionTools.UI
         {
             _cpuService = cpuService;
             Dock = DockStyle.Fill;
+            BackColor = UiStyles.WindowBackColor;
             BuildLayout();
 
             _refreshTimer.Interval = 3000;
@@ -43,7 +44,8 @@ namespace PackagingInspectionTools.UI
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 4,
-                Padding = new Padding(12)
+                Padding = new Padding(12),
+                BackColor = UiStyles.WindowBackColor
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
@@ -56,6 +58,7 @@ namespace PackagingInspectionTools.UI
             _summaryLabel.Dock = DockStyle.Fill;
             _summaryLabel.TextAlign = ContentAlignment.MiddleLeft;
             _summaryLabel.ForeColor = Color.FromArgb(55, 55, 55);
+            _summaryLabel.BackColor = UiStyles.SurfaceBackColor;
             _summaryLabel.BorderStyle = BorderStyle.FixedSingle;
             _summaryLabel.Padding = new Padding(10, 0, 10, 0);
             root.Controls.Add(_summaryLabel, 0, 1);
@@ -87,7 +90,8 @@ namespace PackagingInspectionTools.UI
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true
+                WrapContents = true,
+                BackColor = UiStyles.WindowBackColor
             };
 
             toolbar.Controls.Add(CreateButton("刷新 CPU 状态", () => RefreshCpuView(true)));
@@ -102,7 +106,7 @@ namespace PackagingInspectionTools.UI
                 AutoSize = true,
                 Margin = new Padding(0, 4, 0, 0),
                 Text = "“禁用小核”会把选中进程的 CPU 亲和性限制到高性能核心，适合算法进程和低延迟通信进程；部分操作需要管理员权限。",
-                ForeColor = Color.FromArgb(90, 90, 90)
+                ForeColor = UiStyles.SecondaryTextColor
             };
             toolbar.Controls.Add(note);
 
@@ -123,6 +127,7 @@ namespace PackagingInspectionTools.UI
             _coreGrid.RowHeadersVisible = false;
             _coreGrid.BackgroundColor = SystemColors.Window;
             _coreGrid.BorderStyle = BorderStyle.FixedSingle;
+            UiStyles.StyleGrid(_coreGrid);
             _coreGrid.DataSource = _coreSource;
             _coreGrid.Columns.Add(FillColumn("LogicalProcessorIndex", "逻辑 CPU", 80, 16));
             _coreGrid.Columns.Add(FillColumn("CoreTypeText", "核心类型", 120, 32));
@@ -144,6 +149,7 @@ namespace PackagingInspectionTools.UI
             _processGrid.RowHeadersVisible = false;
             _processGrid.BackgroundColor = SystemColors.Window;
             _processGrid.BorderStyle = BorderStyle.FixedSingle;
+            UiStyles.StyleGrid(_processGrid);
             _processGrid.DataSource = _processSource;
             _processGrid.MouseDown += ProcessGridMouseDown;
             _processGrid.Columns.Add(FillColumn("Id", "PID", 70, 8));
@@ -421,10 +427,11 @@ namespace PackagingInspectionTools.UI
             var button = new Button
             {
                 Text = text,
-                Width = 170,
-                Height = 32,
+                Width = UiStyles.GetButtonWidth(text, SystemFonts.MessageBoxFont, 170),
+                Height = 34,
                 Margin = new Padding(0, 4, 8, 4)
             };
+            UiStyles.StyleButton(button);
             button.Click += (sender, args) => action();
             return button;
         }
