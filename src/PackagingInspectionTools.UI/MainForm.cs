@@ -1,10 +1,15 @@
+using PackagingInspectionTools.Core.Cpu;
+using PackagingInspectionTools.Core.Gpu;
 using PackagingInspectionTools.Core.Network;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace PackagingInspectionTools.UI
@@ -12,26 +17,38 @@ namespace PackagingInspectionTools.UI
     public sealed class MainForm : Form
     {
         private readonly INetworkAdapterService _networkService;
+        private readonly ICpuService _cpuService;
+        private readonly IGpuService _gpuService;
         private readonly BindingSource _adapterSource = new BindingSource();
         private readonly BindingSource _propertySource = new BindingSource();
         private readonly DataGridView _adapterGrid = new DataGridView();
         private readonly DataGridView _propertyGrid = new DataGridView();
         private readonly ComboBox _valueComboBox = new ComboBox();
+        private readonly TextBox _ipAddressTextBox = new TextBox();
+        private readonly TextBox _subnetMaskTextBox = new TextBox();
+        private readonly TextBox _pingTargetTextBox = new TextBox();
+        private readonly NumericUpDown _pingCountInput = new NumericUpDown();
+        private readonly NumericUpDown _pingTimeoutInput = new NumericUpDown();
+        private readonly NumericUpDown _pingBufferSizeInput = new NumericUpDown();
+        private readonly NumericUpDown _pingTtlInput = new NumericUpDown();
+        private readonly CheckBox _pingDontFragmentCheckBox = new CheckBox();
         private readonly Label _statusLabel = new Label();
         private SplitContainer _contentSplit;
 
         private IReadOnlyList<NetworkAdapterInfo> _adapters = Array.Empty<NetworkAdapterInfo>();
 
         public MainForm()
-            : this(new WindowsNetworkAdapterService())
+            : this(new WindowsNetworkAdapterService(), new WindowsCpuService(), new WindowsGpuService())
         {
         }
 
-        internal MainForm(INetworkAdapterService networkService)
+        internal MainForm(INetworkAdapterService networkService, ICpuService cpuService, IGpuService gpuService)
         {
             _networkService = networkService;
+            _cpuService = cpuService;
+            _gpuService = gpuService;
 
-            Text = "Packaging Inspection Tools - Network";
+            Text = "Packaging Inspection Tools";
             MinimumSize = new Size(1100, 700);
             Size = new Size(1360, 780);
             StartPosition = FormStartPosition.CenterScreen;
@@ -43,6 +60,19 @@ namespace PackagingInspectionTools.UI
 
         private void BuildLayout()
         {
+            var tabs = new TabControl
+            {
+                Dock = DockStyle.Fill
+            };
+            Controls.Add(tabs);
+
+            var networkPage = new TabPage("网络设置");
+            var cpuPage = new TabPage("CPU 设置");
+            var gpuPage = new TabPage("GPU 设置");
+            tabs.TabPages.Add(networkPage);
+            tabs.TabPages.Add(cpuPage);
+            tabs.TabPages.Add(gpuPage);
+
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -52,9 +82,9 @@ namespace PackagingInspectionTools.UI
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            Controls.Add(root);
+            networkPage.Controls.Add(root);
 
             root.Controls.Add(BuildToolbar(), 0, 0);
             root.Controls.Add(BuildContent(), 0, 1);
@@ -64,6 +94,9 @@ namespace PackagingInspectionTools.UI
             _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
             _statusLabel.ForeColor = Color.FromArgb(70, 70, 70);
             root.Controls.Add(_statusLabel, 0, 3);
+
+            cpuPage.Controls.Add(new CpuControl(_cpuService));
+            gpuPage.Controls.Add(new GpuControl(_gpuService));
         }
 
         private Control BuildToolbar()
@@ -81,6 +114,7 @@ namespace PackagingInspectionTools.UI
             toolbar.Controls.Add(CreateButton("导出当前配置", ExportCurrentConfiguration));
             toolbar.Controls.Add(CreateButton("导入配置到选中网卡", ImportConfigurationToSelectedAdapter));
             toolbar.Controls.Add(CreateButton("复制到其他网卡", CopySelectedAdapterToAnother));
+            toolbar.Controls.Add(CreateButton("对比标准配置", CompareSelectedAdapterWithStandardConfiguration));
 
             var note = new Label
             {
@@ -120,13 +154,19 @@ namespace PackagingInspectionTools.UI
             var panel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
+                ColumnCount = 6,
+                RowCount = 3,
                 Padding = new Padding(0, 12, 0, 0)
             };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
             var valueLabel = new Label
             {
@@ -139,9 +179,70 @@ namespace PackagingInspectionTools.UI
             _valueComboBox.Dock = DockStyle.Fill;
             _valueComboBox.DropDownStyle = ComboBoxStyle.DropDown;
             panel.Controls.Add(_valueComboBox, 1, 0);
+            panel.SetColumnSpan(_valueComboBox, 3);
 
-            panel.Controls.Add(CreateButton("载入当前值", LoadSelectedPropertyValue), 2, 0);
-            panel.Controls.Add(CreateButton("写入选中参数", SaveSelectedProperty), 3, 0);
+            panel.Controls.Add(CreateButton("载入当前值", LoadSelectedPropertyValue), 4, 0);
+            panel.Controls.Add(CreateButton("写入选中参数", SaveSelectedProperty), 5, 0);
+
+            panel.Controls.Add(new Label
+            {
+                Text = "静态 IP",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 1);
+            _ipAddressTextBox.Dock = DockStyle.Fill;
+            panel.Controls.Add(_ipAddressTextBox, 1, 1);
+
+            panel.Controls.Add(new Label
+            {
+                Text = "子网掩码",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 2, 1);
+            _subnetMaskTextBox.Dock = DockStyle.Fill;
+            panel.Controls.Add(_subnetMaskTextBox, 3, 1);
+
+            panel.Controls.Add(CreateButton("应用静态 IP", ApplyStaticIPv4Address), 4, 1);
+            panel.Controls.Add(CreateButton("恢复自动获取 IP", EnableDhcpIPv4), 5, 1);
+
+            panel.Controls.Add(new Label
+            {
+                Text = "Ping 目标",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 2);
+            _pingTargetTextBox.Dock = DockStyle.Fill;
+            panel.Controls.Add(_pingTargetTextBox, 1, 2);
+
+            var pingOptions = BuildPingOptionsPanel();
+            panel.Controls.Add(pingOptions, 2, 2);
+            panel.SetColumnSpan(pingOptions, 3);
+            panel.Controls.Add(CreateButton("开始 Ping", PingTarget), 5, 2);
+
+            return panel;
+        }
+
+        private Control BuildPingOptionsPanel()
+        {
+            var panel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false
+            };
+
+            panel.Controls.Add(CreateInlineLabel("次数"));
+            panel.Controls.Add(ConfigureNumber(_pingCountInput, 1, 100, 4, 56));
+            panel.Controls.Add(CreateInlineLabel("超时ms"));
+            panel.Controls.Add(ConfigureNumber(_pingTimeoutInput, 100, 60000, 1000, 72));
+            panel.Controls.Add(CreateInlineLabel("包"));
+            panel.Controls.Add(ConfigureNumber(_pingBufferSizeInput, 0, 65500, 32, 72));
+            panel.Controls.Add(CreateInlineLabel("TTL"));
+            panel.Controls.Add(ConfigureNumber(_pingTtlInput, 1, 255, 128, 56));
+            _pingDontFragmentCheckBox.Text = "禁止分片";
+            _pingDontFragmentCheckBox.AutoSize = true;
+            _pingDontFragmentCheckBox.Margin = new Padding(10, 8, 0, 0);
+            panel.Controls.Add(_pingDontFragmentCheckBox);
 
             return panel;
         }
@@ -168,6 +269,9 @@ namespace PackagingInspectionTools.UI
             _adapterGrid.Columns.Add(FillColumn("Name", "名称", 150, 18));
             _adapterGrid.Columns.Add(FillColumn("OperationalStatus", "状态", 70, 7));
             _adapterGrid.Columns.Add(FillColumn("SpeedText", "速率", 90, 9));
+            _adapterGrid.Columns.Add(FillColumn("IPv4Address", "IPv4", 120, 13));
+            _adapterGrid.Columns.Add(FillColumn("IPv4SubnetMask", "子网掩码", 120, 13));
+            _adapterGrid.Columns.Add(FillColumn("DriverVersion", "驱动版本", 120, 13));
             _adapterGrid.Columns.Add(FillColumn("AdapterType", "类型", 110, 10));
             _adapterGrid.Columns.Add(FillColumn("MacAddress", "MAC", 125, 12));
             _adapterGrid.Columns.Add(FillColumn("Description", "描述", 260, 30));
@@ -219,6 +323,8 @@ namespace PackagingInspectionTools.UI
             _propertySource.DataSource = adapter == null
                 ? new List<AdapterAdvancedProperty>()
                 : adapter.AdvancedProperties.ToList();
+            _ipAddressTextBox.Text = adapter == null ? string.Empty : adapter.IPv4Address;
+            _subnetMaskTextBox.Text = adapter == null ? string.Empty : adapter.IPv4SubnetMask;
             LoadSelectedPropertyValue();
         }
 
@@ -328,6 +434,92 @@ namespace PackagingInspectionTools.UI
 
             ReportResult(_networkService.RestartAdapter(adapter.Name));
             RefreshAdapters();
+        }
+
+        private void ApplyStaticIPv4Address()
+        {
+            var adapter = GetSelectedAdapter();
+            if (adapter == null)
+            {
+                ShowError("无法设置 IP", "请先选择网卡。");
+                return;
+            }
+
+            var ipAddress = _ipAddressTextBox.Text.Trim();
+            var subnetMask = _subnetMaskTextBox.Text.Trim();
+            if (!IsIPv4Address(ipAddress) || !IsIPv4Address(subnetMask))
+            {
+                ShowError("无法设置 IP", "请输入有效的 IPv4 地址和子网掩码，例如 192.168.1.10 / 255.255.255.0。");
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"将关闭网卡“{adapter.Name}”的自动获取 IP，并设置静态地址：\n\nIP：{ipAddress}\n子网掩码：{subnetMask}\n\n该操作可能中断当前网络连接，是否继续？",
+                "确认设置静态 IP",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+            if (confirm != DialogResult.Yes)
+            {
+                return;
+            }
+
+            ReportResult(_networkService.SetStaticIPv4Address(adapter.Name, ipAddress, subnetMask));
+            RefreshAdapters();
+        }
+
+        private void EnableDhcpIPv4()
+        {
+            var adapter = GetSelectedAdapter();
+            if (adapter == null)
+            {
+                ShowError("无法恢复自动获取 IP", "请先选择网卡。");
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"将把网卡“{adapter.Name}”恢复为自动获取 IPv4 地址。\n\n该操作可能中断当前网络连接，是否继续？",
+                "确认恢复自动获取 IP",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+            if (confirm != DialogResult.Yes)
+            {
+                return;
+            }
+
+            ReportResult(_networkService.EnableDhcpIPv4(adapter.Name));
+            RefreshAdapters();
+        }
+
+        private void PingTarget()
+        {
+            var target = _pingTargetTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(target) || target.Contains("\"") || target.Any(char.IsWhiteSpace))
+            {
+                ShowError("无法 Ping", "请输入有效的 IP 地址或主机名，目标中不能包含空格。");
+                return;
+            }
+
+            var adapter = GetSelectedAdapter();
+            var sourceAddress = adapter != null && IsIPv4Address(adapter.IPv4Address)
+                ? adapter.IPv4Address
+                : string.Empty;
+
+            var request = new NetworkPingRequest(
+                target,
+                (int)_pingCountInput.Value,
+                (int)_pingTimeoutInput.Value,
+                (int)_pingBufferSizeInput.Value,
+                (int)_pingTtlInput.Value,
+                _pingDontFragmentCheckBox.Checked,
+                sourceAddress);
+
+            _statusLabel.Text = "正在 Ping " + target + "...";
+            ShowRealtimePingDialog(
+                "Ping 结果",
+                "目标：" + target + Environment.NewLine +
+                "源地址：" + (string.IsNullOrWhiteSpace(sourceAddress) ? "系统自动选择" : sourceAddress) + Environment.NewLine + Environment.NewLine +
+                "正在执行 Ping..." + Environment.NewLine,
+                request);
         }
 
         private void ExportCurrentConfiguration()
@@ -469,6 +661,66 @@ namespace PackagingInspectionTools.UI
                 settings);
         }
 
+        private void CompareSelectedAdapterWithStandardConfiguration()
+        {
+            var adapter = GetSelectedAdapter();
+            if (adapter == null)
+            {
+                ShowError("无法对比", "请先选择要对比的当前网卡。");
+                return;
+            }
+
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Title = "选择标准网卡配置";
+                dialog.Filter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*";
+                dialog.CheckFileExists = true;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                List<ConfigurationRow> rows;
+                try
+                {
+                    rows = ReadConfigurationRows(dialog.FileName);
+                }
+                catch (Exception ex)
+                {
+                    ShowError("对比失败", ex.Message);
+                    return;
+                }
+
+                if (rows.Count == 0)
+                {
+                    ShowError("对比失败", "标准配置文件中没有可对比的网卡参数。");
+                    return;
+                }
+
+                var sourceNames = rows
+                    .Select(item => item.AdapterName)
+                    .Where(item => !string.IsNullOrWhiteSpace(item))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(item => item)
+                    .ToList();
+
+                var selectedSource = sourceNames.Count <= 1
+                    ? sourceNames.FirstOrDefault()
+                    : SelectValue("选择标准配置", "标准配置文件中包含多个网卡，请选择用于对比的配置。", sourceNames);
+                if (sourceNames.Count > 1 && selectedSource == null)
+                {
+                    return;
+                }
+
+                var standardRows = rows
+                    .Where(item => selectedSource == null || string.Equals(item.AdapterName, selectedSource, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var comparisonRows = BuildComparisonRows(adapter, standardRows);
+                ShowComparisonDialog(adapter.Name, selectedSource, comparisonRows);
+            }
+        }
+
         private void ConfirmAndApplySettings(string title, string message, NetworkAdapterInfo targetAdapter, IList<PropertyValue> settings)
         {
             if (settings.Count == 0)
@@ -605,6 +857,26 @@ namespace PackagingInspectionTools.UI
             return button;
         }
 
+        private static Label CreateInlineLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                AutoSize = true,
+                Margin = new Padding(8, 9, 2, 0)
+            };
+        }
+
+        private static NumericUpDown ConfigureNumber(NumericUpDown input, int minimum, int maximum, int value, int width)
+        {
+            input.Minimum = minimum;
+            input.Maximum = maximum;
+            input.Value = value;
+            input.Width = width;
+            input.Margin = new Padding(0, 5, 0, 0);
+            return input;
+        }
+
         private void ReportResult(OperationResult result)
         {
             _statusLabel.Text = result.Message;
@@ -620,10 +892,141 @@ namespace PackagingInspectionTools.UI
             MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
+        private static void ShowTextDialog(string title, string text)
+        {
+            using (var form = new Form())
+            using (var layout = new TableLayoutPanel())
+            using (var textBox = new TextBox())
+            using (var closeButton = new Button())
+            {
+                form.Text = title;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.ClientSize = new Size(780, 520);
+                form.Font = new Font("Microsoft YaHei UI", 9F);
+
+                layout.Dock = DockStyle.Fill;
+                layout.Padding = new Padding(12);
+                layout.RowCount = 2;
+                layout.ColumnCount = 1;
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+                form.Controls.Add(layout);
+
+                textBox.Dock = DockStyle.Fill;
+                textBox.Multiline = true;
+                textBox.ReadOnly = true;
+                textBox.ScrollBars = ScrollBars.Both;
+                textBox.WordWrap = false;
+                textBox.Font = new Font("Consolas", 9F);
+                textBox.Text = text;
+                layout.Controls.Add(textBox, 0, 0);
+
+                closeButton.Text = "关闭";
+                closeButton.Width = 96;
+                closeButton.Height = 32;
+                closeButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+                closeButton.DialogResult = DialogResult.OK;
+                layout.Controls.Add(closeButton, 0, 1);
+                form.AcceptButton = closeButton;
+                form.ShowDialog();
+            }
+        }
+
+        private void ShowRealtimePingDialog(string title, string initialText, NetworkPingRequest request)
+        {
+            using (var form = new Form())
+            using (var layout = new TableLayoutPanel())
+            using (var textBox = new TextBox())
+            using (var closeButton = new Button())
+            {
+                form.Text = title;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.ClientSize = new Size(780, 520);
+                form.Font = new Font("Microsoft YaHei UI", 9F);
+
+                layout.Dock = DockStyle.Fill;
+                layout.Padding = new Padding(12);
+                layout.RowCount = 2;
+                layout.ColumnCount = 1;
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+                form.Controls.Add(layout);
+
+                textBox.Dock = DockStyle.Fill;
+                textBox.Multiline = true;
+                textBox.ReadOnly = true;
+                textBox.ScrollBars = ScrollBars.Both;
+                textBox.WordWrap = false;
+                textBox.Font = new Font("Consolas", 9F);
+                textBox.Text = initialText;
+                layout.Controls.Add(textBox, 0, 0);
+
+                closeButton.Text = "关闭";
+                closeButton.Width = 96;
+                closeButton.Height = 32;
+                closeButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+                closeButton.Enabled = false;
+                closeButton.DialogResult = DialogResult.OK;
+                layout.Controls.Add(closeButton, 0, 1);
+                form.AcceptButton = closeButton;
+
+                form.Shown += (sender, args) =>
+                {
+                    Task.Factory.StartNew(() =>
+                    {
+                        var result = _networkService.Ping(request, text =>
+                        {
+                            AppendTextSafe(textBox, text);
+                        });
+
+                        AppendTextSafe(textBox, Environment.NewLine + result.Message + Environment.NewLine);
+                        SetPingDialogCompleted(form, closeButton, result);
+                    });
+                };
+
+                form.ShowDialog(this);
+            }
+        }
+
+        private void AppendTextSafe(TextBox textBox, string text)
+        {
+            if (textBox.IsDisposed)
+            {
+                return;
+            }
+
+            if (textBox.InvokeRequired)
+            {
+                textBox.BeginInvoke(new Action(() => AppendTextSafe(textBox, text)));
+                return;
+            }
+
+            textBox.AppendText(text);
+            textBox.SelectionStart = textBox.TextLength;
+            textBox.ScrollToCaret();
+        }
+
+        private void SetPingDialogCompleted(Form form, Button closeButton, OperationResult result)
+        {
+            if (form.IsDisposed)
+            {
+                return;
+            }
+
+            if (form.InvokeRequired)
+            {
+                form.BeginInvoke(new Action(() => SetPingDialogCompleted(form, closeButton, result)));
+                return;
+            }
+
+            closeButton.Enabled = true;
+            _statusLabel.Text = result.Succeeded ? "Ping 完成。" : "Ping 失败。";
+        }
+
         private static string BuildConfigurationCsv(IEnumerable<NetworkAdapterInfo> adapters)
         {
             var builder = new StringBuilder();
-            builder.AppendLine("AdapterName,AdapterDescription,Status,Speed,MacAddress,RegistryPath,PropertyName,PropertyKey,CurrentValue,RawValue,SupportedValues");
+            builder.AppendLine("AdapterName,AdapterDescription,Status,Speed,MacAddress,IPv4Address,IPv4SubnetMask,DriverVersion,RegistryPath,PropertyName,PropertyKey,CurrentValue,RawValue,SupportedValues");
 
             foreach (var adapter in adapters)
             {
@@ -653,6 +1056,8 @@ namespace PackagingInspectionTools.UI
 
             var headers = ParseCsvLine(lines[0]);
             var adapterNameIndex = headers.FindIndex(item => string.Equals(item, "AdapterName", StringComparison.OrdinalIgnoreCase));
+            var ipv4AddressIndex = headers.FindIndex(item => string.Equals(item, "IPv4Address", StringComparison.OrdinalIgnoreCase));
+            var ipv4SubnetMaskIndex = headers.FindIndex(item => string.Equals(item, "IPv4SubnetMask", StringComparison.OrdinalIgnoreCase));
             var propertyKeyIndex = headers.FindIndex(item => string.Equals(item, "PropertyKey", StringComparison.OrdinalIgnoreCase));
             var rawValueIndex = headers.FindIndex(item => string.Equals(item, "RawValue", StringComparison.OrdinalIgnoreCase));
 
@@ -673,11 +1078,179 @@ namespace PackagingInspectionTools.UI
 
                 rows.Add(new ConfigurationRow(
                     GetField(fields, adapterNameIndex),
+                    GetField(fields, ipv4AddressIndex),
+                    GetField(fields, ipv4SubnetMaskIndex),
                     propertyKey,
                     rawValue));
             }
 
             return rows;
+        }
+
+        private static List<ComparisonRow> BuildComparisonRows(NetworkAdapterInfo adapter, IEnumerable<ConfigurationRow> standardRows)
+        {
+            var result = new List<ComparisonRow>();
+            var currentProperties = adapter.AdvancedProperties.ToDictionary(item => item.Key, StringComparer.OrdinalIgnoreCase);
+            var standardNetwork = standardRows.FirstOrDefault();
+            var standardProperties = standardRows
+                .GroupBy(item => item.PropertyKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(item => item.Key, item => item.First(), StringComparer.OrdinalIgnoreCase);
+
+            if (standardNetwork != null && !string.IsNullOrWhiteSpace(standardNetwork.IPv4Address))
+            {
+                result.Add(new ComparisonRow(
+                    string.Equals(adapter.IPv4Address, standardNetwork.IPv4Address, StringComparison.OrdinalIgnoreCase) ? "一致" : "不同",
+                    "IPv4Address",
+                    adapter.IPv4Address,
+                    standardNetwork.IPv4Address,
+                    "IPv4 地址"));
+            }
+
+            if (standardNetwork != null && !string.IsNullOrWhiteSpace(standardNetwork.IPv4SubnetMask))
+            {
+                result.Add(new ComparisonRow(
+                    string.Equals(adapter.IPv4SubnetMask, standardNetwork.IPv4SubnetMask, StringComparison.OrdinalIgnoreCase) ? "一致" : "不同",
+                    "IPv4SubnetMask",
+                    adapter.IPv4SubnetMask,
+                    standardNetwork.IPv4SubnetMask,
+                    "IPv4 子网掩码"));
+            }
+
+            foreach (var standard in standardProperties.Values.OrderBy(item => item.PropertyKey))
+            {
+                AdapterAdvancedProperty current;
+                if (!currentProperties.TryGetValue(standard.PropertyKey, out current))
+                {
+                    result.Add(new ComparisonRow(
+                        "当前网卡缺失",
+                        standard.PropertyKey,
+                        string.Empty,
+                        standard.RawValue,
+                        "当前网卡驱动未暴露该参数"));
+                    continue;
+                }
+
+                var currentValue = current.CurrentValue ?? string.Empty;
+                var status = string.Equals(currentValue, standard.RawValue, StringComparison.OrdinalIgnoreCase)
+                    ? "一致"
+                    : "不同";
+                result.Add(new ComparisonRow(
+                    status,
+                    standard.PropertyKey,
+                    current.CurrentDisplayValue,
+                    standard.RawValue,
+                    current.DisplayName));
+            }
+
+            foreach (var current in currentProperties.Values.OrderBy(item => item.Key))
+            {
+                if (standardProperties.ContainsKey(current.Key))
+                {
+                    continue;
+                }
+
+                result.Add(new ComparisonRow(
+                    "标准配置未包含",
+                    current.Key,
+                    current.CurrentDisplayValue,
+                    string.Empty,
+                    current.DisplayName));
+            }
+
+            return result;
+        }
+
+        private static void ShowComparisonDialog(string adapterName, string standardName, IList<ComparisonRow> rows)
+        {
+            using (var form = new Form())
+            using (var root = new TableLayoutPanel())
+            using (var summaryLabel = new Label())
+            using (var grid = new DataGridView())
+            using (var closeButton = new Button())
+            {
+                var sameCount = rows.Count(item => item.Status == "一致");
+                var differentCount = rows.Count(item => item.Status == "不同");
+                var missingCount = rows.Count(item => item.Status == "当前网卡缺失");
+                var extraCount = rows.Count(item => item.Status == "标准配置未包含");
+
+                form.Text = "网卡配置对比";
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.MinimizeBox = false;
+                form.MaximizeBox = true;
+                form.ClientSize = new Size(980, 640);
+                form.Font = new Font("Microsoft YaHei UI", 9F);
+
+                root.Dock = DockStyle.Fill;
+                root.Padding = new Padding(12);
+                root.RowCount = 3;
+                root.ColumnCount = 1;
+                root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+                form.Controls.Add(root);
+
+                summaryLabel.Dock = DockStyle.Fill;
+                summaryLabel.TextAlign = ContentAlignment.MiddleLeft;
+                summaryLabel.Text =
+                    $"当前网卡：{adapterName}\r\n" +
+                    $"标准配置：{(string.IsNullOrWhiteSpace(standardName) ? "配置文件" : standardName)}    一致：{sameCount}    不同：{differentCount}    缺失：{missingCount}    额外：{extraCount}";
+                root.Controls.Add(summaryLabel, 0, 0);
+
+                grid.Dock = DockStyle.Fill;
+                grid.AutoGenerateColumns = false;
+                grid.ReadOnly = true;
+                grid.AllowUserToAddRows = false;
+                grid.AllowUserToDeleteRows = false;
+                grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+                grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+                grid.MultiSelect = false;
+                grid.RowHeadersVisible = false;
+                grid.BackgroundColor = SystemColors.Window;
+                grid.BorderStyle = BorderStyle.FixedSingle;
+                grid.Columns.Add(FillColumn("Status", "结果", 110, 12));
+                grid.Columns.Add(FillColumn("PropertyKey", "驱动键", 150, 18));
+                grid.Columns.Add(FillColumn("CurrentValue", "当前值", 220, 30));
+                grid.Columns.Add(FillColumn("StandardValue", "标准值", 220, 30));
+                grid.Columns.Add(FillColumn("Description", "说明", 220, 30));
+                grid.DataSource = rows.ToList();
+                grid.CellFormatting += (sender, args) =>
+                {
+                    if (args.RowIndex < 0)
+                    {
+                        return;
+                    }
+
+                    var row = grid.Rows[args.RowIndex].DataBoundItem as ComparisonRow;
+                    if (row == null)
+                    {
+                        return;
+                    }
+
+                    if (row.Status == "一致")
+                    {
+                        grid.Rows[args.RowIndex].DefaultCellStyle.BackColor = Color.FromArgb(235, 248, 238);
+                    }
+                    else if (row.Status == "不同")
+                    {
+                        grid.Rows[args.RowIndex].DefaultCellStyle.BackColor = Color.FromArgb(255, 244, 220);
+                    }
+                    else
+                    {
+                        grid.Rows[args.RowIndex].DefaultCellStyle.BackColor = Color.FromArgb(255, 235, 235);
+                    }
+                };
+                root.Controls.Add(grid, 0, 1);
+
+                closeButton.Text = "关闭";
+                closeButton.Width = 96;
+                closeButton.Height = 32;
+                closeButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+                closeButton.DialogResult = DialogResult.OK;
+                root.Controls.Add(closeButton, 0, 2);
+                form.AcceptButton = closeButton;
+
+                form.ShowDialog();
+            }
         }
 
         private static List<string> ParseCsvLine(string line)
@@ -798,6 +1371,9 @@ namespace PackagingInspectionTools.UI
                 adapter.OperationalStatus,
                 adapter.SpeedText,
                 adapter.MacAddress,
+                adapter.IPv4Address,
+                adapter.IPv4SubnetMask,
+                adapter.DriverVersion,
                 adapter.RegistryPath,
                 property == null ? string.Empty : property.DisplayName,
                 property == null ? string.Empty : property.Key,
@@ -817,6 +1393,12 @@ namespace PackagingInspectionTools.UI
             }
 
             return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        private static bool IsIPv4Address(string value)
+        {
+            IPAddress address;
+            return IPAddress.TryParse(value, out address) && address.AddressFamily == AddressFamily.InterNetwork;
         }
 
         private sealed class ComboBoxOption
@@ -852,18 +1434,46 @@ namespace PackagingInspectionTools.UI
 
         private sealed class ConfigurationRow
         {
-            public ConfigurationRow(string adapterName, string propertyKey, string rawValue)
+            public ConfigurationRow(string adapterName, string ipv4Address, string ipv4SubnetMask, string propertyKey, string rawValue)
             {
                 AdapterName = adapterName;
+                IPv4Address = ipv4Address;
+                IPv4SubnetMask = ipv4SubnetMask;
                 PropertyKey = propertyKey;
                 RawValue = rawValue;
             }
 
             public string AdapterName { get; }
 
+            public string IPv4Address { get; }
+
+            public string IPv4SubnetMask { get; }
+
             public string PropertyKey { get; }
 
             public string RawValue { get; }
+        }
+
+        private sealed class ComparisonRow
+        {
+            public ComparisonRow(string status, string propertyKey, string currentValue, string standardValue, string description)
+            {
+                Status = status;
+                PropertyKey = propertyKey;
+                CurrentValue = currentValue;
+                StandardValue = standardValue;
+                Description = description;
+            }
+
+            public string Status { get; }
+
+            public string PropertyKey { get; }
+
+            public string CurrentValue { get; }
+
+            public string StandardValue { get; }
+
+            public string Description { get; }
         }
     }
 }

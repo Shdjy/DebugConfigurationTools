@@ -12,6 +12,9 @@ namespace PackagingInspectionTools.Core.Network
             string operationalStatus,
             string adapterType,
             string macAddress,
+            string ipv4Address,
+            string ipv4SubnetMask,
+            string driverVersion,
             long speedBitsPerSecond,
             IReadOnlyList<AdapterAdvancedProperty> advancedProperties)
         {
@@ -22,6 +25,9 @@ namespace PackagingInspectionTools.Core.Network
             OperationalStatus = operationalStatus;
             AdapterType = adapterType;
             MacAddress = macAddress;
+            IPv4Address = ipv4Address;
+            IPv4SubnetMask = ipv4SubnetMask;
+            DriverVersion = driverVersion;
             SpeedBitsPerSecond = speedBitsPerSecond;
             AdvancedProperties = advancedProperties;
         }
@@ -39,6 +45,12 @@ namespace PackagingInspectionTools.Core.Network
         public string AdapterType { get; }
 
         public string MacAddress { get; }
+
+        public string IPv4Address { get; }
+
+        public string IPv4SubnetMask { get; }
+
+        public string DriverVersion { get; }
 
         public long SpeedBitsPerSecond { get; }
 

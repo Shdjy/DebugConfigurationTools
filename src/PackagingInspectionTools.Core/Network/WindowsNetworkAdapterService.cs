@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Security;
 
 namespace PackagingInspectionTools.Core.Network
@@ -30,6 +31,9 @@ namespace PackagingInspectionTools.Core.Network
                     networkInterface.OperationalStatus.ToString(),
                     networkInterface.NetworkInterfaceType.ToString(),
                     FormatMacAddress(networkInterface.GetPhysicalAddress()),
+                    GetPrimaryIPv4Address(networkInterface),
+                    GetPrimaryIPv4SubnetMask(networkInterface),
+                    registryPath == null ? string.Empty : GetRegistryValue(registryPath, "DriverVersion"),
                     networkInterface.Speed,
                     registryPath == null ? Array.Empty<AdapterAdvancedProperty>() : ReadAdvancedProperties(registryPath)));
             }
@@ -142,6 +146,28 @@ namespace PackagingInspectionTools.Core.Network
                 : enable;
         }
 
+        public OperationResult SetStaticIPv4Address(string adapterName, string ipAddress, string subnetMask)
+        {
+            return RunNetsh($"interface ipv4 set address name=\"{adapterName}\" source=static address={ipAddress} mask={subnetMask} gateway=none");
+        }
+
+        public OperationResult EnableDhcpIPv4(string adapterName)
+        {
+            return RunNetsh($"interface ipv4 set address name=\"{adapterName}\" source=dhcp");
+        }
+
+        public OperationResult Ping(NetworkPingRequest request)
+        {
+            var arguments = BuildPingArguments(request);
+            return RunProcess("ping", arguments);
+        }
+
+        public OperationResult Ping(NetworkPingRequest request, Action<string> outputReceived)
+        {
+            var arguments = BuildPingArguments(request);
+            return RunProcessRealtime("ping", arguments, outputReceived);
+        }
+
         private static Dictionary<string, string> LoadRegistryAdapters()
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -248,11 +274,16 @@ namespace PackagingInspectionTools.Core.Network
 
         private static OperationResult RunNetsh(string arguments)
         {
+            return RunProcess("netsh", arguments);
+        }
+
+        private static OperationResult RunProcess(string fileName, string arguments)
+        {
             try
             {
                 using (var process = Process.Start(new ProcessStartInfo
                 {
-                    FileName = "netsh",
+                    FileName = fileName,
                     Arguments = arguments,
                     CreateNoWindow = true,
                     UseShellExecute = false,
@@ -262,7 +293,7 @@ namespace PackagingInspectionTools.Core.Network
                 {
                     if (process == null)
                     {
-                        return OperationResult.Failure("netsh could not be started.");
+                        return OperationResult.Failure(fileName + " could not be started.");
                     }
 
                     process.WaitForExit(15000);
@@ -280,15 +311,128 @@ namespace PackagingInspectionTools.Core.Network
             }
         }
 
+        private static OperationResult RunProcessRealtime(string fileName, string arguments, Action<string> outputReceived)
+        {
+            try
+            {
+                using (var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = fileName,
+                    Arguments = arguments,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    StandardOutputEncoding = System.Text.Encoding.Default,
+                    StandardErrorEncoding = System.Text.Encoding.Default
+                }))
+                {
+                    if (process == null)
+                    {
+                        return OperationResult.Failure(fileName + " could not be started.");
+                    }
+
+                    while (!process.StandardOutput.EndOfStream)
+                    {
+                        outputReceived(process.StandardOutput.ReadLine() + Environment.NewLine);
+                    }
+
+                    var error = process.StandardError.ReadToEnd();
+                    process.WaitForExit(15000);
+
+                    if (!string.IsNullOrWhiteSpace(error))
+                    {
+                        outputReceived(error + Environment.NewLine);
+                    }
+
+                    return process.ExitCode == 0
+                        ? OperationResult.Success("Ping completed.")
+                        : OperationResult.Failure(string.IsNullOrWhiteSpace(error) ? "Ping failed." : error);
+                }
+            }
+            catch (Exception ex)
+            {
+                return OperationResult.Failure(ex.Message);
+            }
+        }
+
         private static string Normalize(string value)
         {
             return value.Replace("-", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
+        }
+
+        private static string BuildPingArguments(NetworkPingRequest request)
+        {
+            var arguments = new List<string>
+            {
+                "-n",
+                Clamp(request.Count, 1, 100).ToString(),
+                "-w",
+                Clamp(request.TimeoutMilliseconds, 100, 60000).ToString(),
+                "-l",
+                Clamp(request.BufferSize, 0, 65500).ToString(),
+                "-i",
+                Clamp(request.Ttl, 1, 255).ToString()
+            };
+
+            if (request.DontFragment)
+            {
+                arguments.Add("-f");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.SourceAddress))
+            {
+                arguments.Add("-S");
+                arguments.Add(request.SourceAddress);
+            }
+
+            arguments.Add(request.Target);
+            return string.Join(" ", arguments.Select(QuoteArgument));
+        }
+
+        private static int Clamp(int value, int minimum, int maximum)
+        {
+            if (value < minimum)
+            {
+                return minimum;
+            }
+
+            return value > maximum ? maximum : value;
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            return "\"" + value.Replace("\"", string.Empty) + "\"";
         }
 
         private static string FormatMacAddress(PhysicalAddress physicalAddress)
         {
             var bytes = physicalAddress.GetAddressBytes();
             return bytes.Length == 0 ? null : string.Join(":", bytes.Select(item => item.ToString("X2")));
+        }
+
+        private static string GetPrimaryIPv4Address(NetworkInterface networkInterface)
+        {
+            var address = networkInterface.GetIPProperties()
+                .UnicastAddresses
+                .FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork);
+            return address == null ? string.Empty : address.Address.ToString();
+        }
+
+        private static string GetPrimaryIPv4SubnetMask(NetworkInterface networkInterface)
+        {
+            var address = networkInterface.GetIPProperties()
+                .UnicastAddresses
+                .FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork);
+            return address == null || address.IPv4Mask == null ? string.Empty : address.IPv4Mask.ToString();
+        }
+
+        private static string GetRegistryValue(string registryPath, string valueName)
+        {
+            using (var key = Registry.LocalMachine.OpenSubKey(registryPath))
+            {
+                return key == null ? string.Empty : key.GetValue(valueName)?.ToString() ?? string.Empty;
+            }
         }
     }
 }
