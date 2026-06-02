@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net472</TargetFramework>
@@ -7,7 +7,10 @@
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     <ImplicitUsings>false</ImplicitUsings>
-    <AssemblyName>PackagingInspectionTools</AssemblyName>
+    <AssemblyName>DebugConfigurationTool</AssemblyName>
+    <AssemblyTitle>调试配置检查工具</AssemblyTitle>
+    <Product>调试配置检查工具</Product>
+    <Description>调试阶段配置检查与参数设置工具</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
@@ -26,3 +29,4 @@
     <ProjectReference Include="..\PackagingInspectionTools.Core\PackagingInspectionTools.Core.csproj" />
   </ItemGroup>
 </Project>
+

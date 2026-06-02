@@ -1,8 +1,8 @@
-# Packaging Inspection Tools
+﻿# 调试配置检查工具
 
-Visual Studio desktop tool for packaging inspection deployment engineers.
+Visual Studio desktop tool for commissioning-stage configuration inspection and parameter tuning.
 
-The tool focuses on network adapter inspection/tuning for high-speed camera acquisition, CPU tuning for low-latency algorithm and Modbus communication workloads, and GPU monitoring/tuning for AI inference workloads.
+The tool focuses on commissioning-stage configuration checks and parameter tuning, including network adapter inspection/tuning for high-speed camera acquisition, CPU tuning for low-latency algorithm and Modbus communication workloads, and GPU monitoring/tuning for AI inference workloads.
 
 ## Projects
 
@@ -64,3 +64,4 @@ Open `PackagingInspectionTools.sln` in Visual Studio 2017 or later, or run:
 ```powershell
 dotnet build PackagingInspectionTools.sln
 ```
+

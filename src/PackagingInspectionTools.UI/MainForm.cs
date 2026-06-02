@@ -1,4 +1,4 @@
-using PackagingInspectionTools.Core.Cpu;
+﻿using PackagingInspectionTools.Core.Cpu;
 using PackagingInspectionTools.Core.Gpu;
 using PackagingInspectionTools.Core.Network;
 using System;
@@ -49,7 +49,7 @@ namespace PackagingInspectionTools.UI
             _cpuService = cpuService;
             _gpuService = gpuService;
 
-            Text = "Packaging Inspection Tools";
+            Text = "调试配置检查工具";
             MinimumSize = new Size(1100, 700);
             Size = new Size(1360, 780);
             StartPosition = FormStartPosition.CenterScreen;
@@ -1494,3 +1494,4 @@ namespace PackagingInspectionTools.UI
         }
     }
 }
+
