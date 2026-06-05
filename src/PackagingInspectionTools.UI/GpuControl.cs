@@ -102,10 +102,12 @@ namespace PackagingInspectionTools.UI
                 Padding = new Padding(0, 10, 0, 0),
                 BackColor = UiStyles.WindowBackColor
             };
-            for (var index = 0; index < 6; index++)
-            {
-                panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / 6));
-            }
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 1));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
@@ -121,7 +123,7 @@ namespace PackagingInspectionTools.UI
 
             panel.Controls.Add(CreateButton("设置功耗上限", SetPowerLimit), 0, 1);
             panel.Controls.Add(CreateButton("锁定核心频率", LockGraphicsClock), 1, 1);
-            panel.Controls.Add(CreateButton("设置计算模式", SetComputeMode), 2, 1);
+            panel.Controls.Add(CreateButton("设置计算模式", SetComputeMode), 3, 1);
 
             return panel;
         }
