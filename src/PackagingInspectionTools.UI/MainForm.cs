@@ -55,7 +55,7 @@ namespace PackagingInspectionTools.UI
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Microsoft YaHei UI", 9F);
             BackColor = UiStyles.WindowBackColor;
-            Icon = new Icon(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Resources\\app.ico"));
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
             BuildLayout();
             Load += (sender, args) => RefreshAdapters();

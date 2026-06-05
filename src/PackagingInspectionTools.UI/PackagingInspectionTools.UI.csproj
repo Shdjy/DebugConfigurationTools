@@ -13,20 +13,19 @@
     <Description>调试阶段配置检查与参数设置工具</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Resources\app.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\PackagingInspectionTools.Core\PackagingInspectionTools.Core.csproj" />
+    <Compile Include="..\PackagingInspectionTools.Core\Cpu\*.cs" Link="Core\Cpu\%(Filename)%(Extension)" />
+    <Compile Include="..\PackagingInspectionTools.Core\Gpu\*.cs" Link="Core\Gpu\%(Filename)%(Extension)" />
+    <Compile Include="..\PackagingInspectionTools.Core\Network\*.cs" Link="Core\Network\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
 
